@@ -5,4 +5,6 @@
 [![Python Version](https://img.shields.io/pypi/pyversions/dpc-3D.svg?color=green)](https://python.org)
 [![CI](https://github.com/zbonaser/dpc-3D/actions/workflows/ci.yml/badge.svg)](https://github.com/zbonaser/dpc-3D/actions/workflows/ci.yml)
 
-3D weak scattering DPC reconstruction
+## 3D weak scattering DPC reconstruction
+
+Code to reconstruct qi2lab DPC images.
