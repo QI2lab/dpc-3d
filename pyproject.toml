@@ -14,7 +14,9 @@ authors = [
     { email = "zbonaser@asu.edu", name = "Zoe Bonasera" },
 ]
 dynamic = ["version"]
-dependencies = []
+dependencies = [
+    "typer"
+]
 
 [tool.hatch.version]
 path = "src/dpc_3d/__init__.py"
@@ -22,6 +24,10 @@ path = "src/dpc_3d/__init__.py"
 [tool.hatch.build.targets.wheel]
 only-include = ["src"]
 sources = ["src"]
+
+[project.scripts]
+setup-dpc = "dpc_3d.setup_dpc:main"
+process-waller = "dpc_3d.process_waller:main"
 
 # extras
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
