@@ -1,0 +1,33 @@
+# https://peps.python.org/pep-0517/
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# https://peps.python.org/pep-0621/
+[project]
+name = "dpc-3D"
+description = "3D weak scattering DPC reconstruction"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "BSD 3-Clause License" }
+authors = [
+    { email = "zbonaser@asu.edu", name = "Zoe Bonasera" },
+]
+dynamic = ["version"]
+dependencies = []
+
+[tool.hatch.version]
+path = "src/dpc_3d/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
+
+# extras
+# https://peps.python.org/pep-0621/#dependencies-optional-dependencies
+[project.optional-dependencies]
+test = ["pytest>=6.0"]
+
+[project.urls]
+homepage = "https://github.com/zbonaser/dpc-3D"
+repository = "https://github.com/zbonaser/dpc-3D"
