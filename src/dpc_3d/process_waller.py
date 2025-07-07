@@ -168,8 +168,8 @@ def dpc3d_GPU(
     na_in          =      0             #inner numerical aperture of the source, 0: conventional DPC pattern, >0: annular pattern
     pixel_size_cam =    2.4             #pixel size of camera in micron
     pixel_size     = pixel_size_cam/mag #in micron
-    pixel_size_z   =    .65             #in micron
-    rotation       = [270, 90, 0, 180]  #degree T=270 B=90 L=0 R=180 OG[90,270,0,180]
+    pixel_size_z   =    .451             #in micron step size of slices
+    rotation       = [0, 180, 270, 90]  #degree T=270 B=90 L=0 R=180 OG[90,270,0,180]
     RI_medium      = 1.33               #background refractive index (air = 1.0, water = 1.33, oil = 1.515)    
     tau_real       = 1e-4               #L2 penalty weight on real part of scattering potential     orginal value= 1e-4 doesnt work for 1e-2
     tau_imag       = 1e-4               #L2 penalty weight on imaginary part of scattering potential    orginal value= 1e-4
@@ -184,10 +184,16 @@ def dpc3d_GPU(
     # Getting these right are key to fitting the calculation on the GPU
     if chunk_size == 768:
         overlap_chunk = 196
+    elif chunk_size == 1024:
+        overlap_chunk = 256
     elif chunk_size == 512:
         overlap_chunk = 131
     elif chunk_size == 256:
         overlap_chunk = 64
+    elif chunk_size == 128:
+        overlap_chunk = 32
+    elif chunk_size == 64:
+        overlap_size = 16
     crop_size = (chunk_size, chunk_size, nz, npos)  #using 768, 768 going to try 512 & 256  Next try 512&128
     overlap = (overlap_chunk, overlap_chunk, 0, 0)          #using 196, 196 orginally &64
 
@@ -199,11 +205,12 @@ def dpc3d_GPU(
         # Run reconstruction on a crop of the whole image
         if first_run:
             solver_3ddpc = Solver3DDPC(crop, wavelength, na, na_in, pixel_size, pixel_size_z, rotation, RI_medium)
+            #solver_3ddpc.setRegularizationParameters(reg_real=0, reg_imag=0, tau = 0, rho=0)    #orginally tauy 1e-6
             solver_3ddpc.setRegularizationParameters(reg_real=tau_real, reg_imag=tau_imag, tau = 1e-6, rho=1e-2)    #orginally tauy 1e-6
             first_run = False
 
         solver_3ddpc.dpc_imgs = crop       
-        RI_obj[destination[:-1]] = cp.asnumpy(solver_3ddpc.solve(method="TV", tv_max_iter=40, boundary_constraint={"real":"negative", "imag":"negative"})[source[:-1]]).astype(np.float32)
+        RI_obj[destination[:-1]] = cp.asnumpy(solver_3ddpc.solve(method="Tikhonov", tv_max_iter=40, boundary_constraint={"real":"negative", "imag":"negative"})[source[:-1]]).astype(np.float32)
     print("Finished.")
     # Write output as compressed ome-tiff.
     print("Writing output...")
