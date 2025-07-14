@@ -1,7 +1,6 @@
-# process_waller.py
+# copy process_waller.py
 
 from datetime import date
-import tifffile
 import gc
 from pathlib import Path
 import numpy as np
@@ -9,9 +8,7 @@ from tifffile import imread, TiffWriter
 import typer
 from tqdm import tqdm
 from ryomen import Slicer
-from careamics import CAREamist
-from careamics.config import create_n2n_configuration, create_n2v_configuration
-#import matplotlib.pyplot as plt
+
 
 try:
     import cupy as cp # type: ignore
@@ -81,122 +78,7 @@ Help from gpt to attempt to plot the illumination sources mixed with our code an
 #    else:
 #        sources = solver.source
 #    return np.fft.fftshift(sources,axes=(-2,-1)).astype(np.float32)
-
-def train_and_apply_n2n(
-    input_path: Path, 
-    output_model_path: Path, 
-    output_image_path: Path,
-    use_n2n: bool,
-    use_n2v2: bool,
-    data: np.ndarray | None = None
-) -> np.ndarray:
-    """Train denoising model on DPC data.
-    
-    Parameters
-    ----------
-    input_path: Path
-        location of MM 2.0 data from DPC instrument
-    output_path: Path
-        location to save bio-model zoo file
-    
-    """
-
-    # load training and validation image and show them side by side
-    if data is None:
-        data = tifffile.imread(input_path)
-    train_image = data[0,0,:]
-    target_image = data[1,0,:]
-
-    if use_n2v2:
-
-        # noise 2 void 2
-        config = create_n2v_configuration(
-            experiment_name="DPC_n2v2",
-            data_type="array",
-            axes="YX",
-            patch_size=(64, 64),
-            batch_size=2048,
-            num_epochs=500,
-            use_n2v2=True,
-        )
-
-    elif use_n2n: 
-        # noise 2 noise network
-        config = create_n2n_configuration(
-            experiment_name="DPC_n2n",
-            data_type="array",
-            axes="YX",
-            patch_size=(64, 64),        #orginally is smaller patch size of patch_size=(64, 64),
-            batch_size=2048,
-            num_epochs=500
-        )
-    else:
-        raise Exception
-
-    # instantiate a CAREamist
-    careamist = CAREamist(source=config)
-
-    if use_n2n:
-    # train
-        careamist.train(
-            train_source=train_image,
-            train_target=target_image,
-            val_minimum_split=5
-        )
-    elif use_n2v2:
-        careamist.train(
-            train_source=train_image,
-            val_source=target_image,
-        )
-
-    # if use_n2n:
-    #     # Export the model to disk
-    #     careamist.export_to_bmz(
-    #         path_to_archive=output_model_path,
-    #         friendly_model_name="dpc_N2N",
-    #         input_array=train_image.astype(np.float32),
-    #         authors=[{"name": "DPC", "affiliation": "ASU"}],
-    #         general_description="qDPC data",
-    #         data_description="old worm"
-    #     )
-    # elif use_n2v2:
-    #     # Export the model to disk
-    #     careamist.export_to_bmz(
-    #         path_to_archive=output_model_path,
-    #         friendly_model_name="dpc_N2V2",
-    #         input_array=train_image.astype(np.float32),
-    #         authors=[{"name": "DPC", "affiliation": "ASU"}],
-    #         general_description="qDPC data",
-    #         data_description="old worm"
-    #     )
-
-    # predict for all z and DPC YX planes in data
-    for z_idx in range(data.shape[0]):
-        for dpc_idx in range(data.shape[1]):
-            denoised_plane = careamist.predict(source=data[z_idx,dpc_idx,:])[0].squeeze()
-            denoised_plane[denoised_plane<0]=0
-            data[z_idx,dpc_idx,:] = denoised_plane.astype(np.uint16)
-    
-    # write denoised data to disk using ome.tif format and bigtiff flag (for files > 4 gb)
-    with tifffile.TiffWriter(output_image_path, bigtiff=True) as tif:
-        metadata = {
-            'axes': 'ZCYX',
-            'SignificantBits': 16,
-            'PhysicalSizeX': 2.4/20,
-            'PhysicalSizeXUnit': 'µm',
-            'PhysicalSizeY': 2.4/20,
-            'PhysicalSizeYUnit': 'µm',
-            'PhysicalSizeZ': .65,
-            'PhysicalSizeYUnit': 'µm',
-            'Channel': {'Name': ['DPC1', 'DPC2', 'DCP3', 'DPC4']},
-        }
-     
-        tif.write(
-            data,
-            resolution=(1e4 / (2.4/20), 1e4 / (2.4/20)),
-            metadata=metadata,
-        )
-    return data 
+ 
 
 
 
@@ -228,7 +110,7 @@ def dpc3d_GPU(
 
     if output_path is None:
         stem = input_path.stem.strip(".ome")
-        output_path = input_path.parent / f"{stem}_dpc.denoised.tiff"
+        output_path = input_path.parent / f"{stem}_dpc.ome.tiff"
 
     # make 4D if needed
     if imgs.ndim == 3:
@@ -247,32 +129,6 @@ def dpc3d_GPU(
     print("Done.")
 
     # TO DO: add denoising here.
-    #denoising attempt 
-    print("Running CAREamist N2N denoising...")
-
-    denoised_data = train_and_apply_n2n(
-        input_path= None,
-        output_model_path= output_path.parent / "n2n_model.zip",
-        output_image_path= output_path.parent / "denoised.tif",
-        use_n2n=True,
-        use_n2v2=False,
-        data = imgs.transpose(1,0,2,3)         
-    )
-    imgs = denoised_data.transpose(1, 0, 2, 3)  # back to [npos, z, y, x]
-    print("Denoising done.")
-
-
-    # ——— Normalize each z-stack ———
-    print("Normalizing...")
-    for i in range(imgs.shape[0]):
-       arr = xp.asarray(imgs[i], dtype=xp.float32)
-       mean_int = arr.mean(axis=(0, 1, 2), keepdims=True)
-       arr = (arr / mean_int) - 1.0
-       if CUPY_AVAILABLE:
-           imgs[i] = cp.asnumpy(arr).astype(np.float32)
-       else:
-           imgs[i] = arr
-    print("Done.")
     
     # reorder → [y, x, z, npos]
     imgs = imgs.transpose(2, 3, 1, 0)
